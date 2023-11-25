@@ -3,7 +3,7 @@ import mediapipe as mp
 import numpy as np
 from math import ceil, degrees
 
-show_video = False
+show_video = True
 
 mp_drawing = mp.solutions.drawing_utils  # type: ignore
 mp_drawing_styles = mp.solutions.drawing_styles  # type: ignore
@@ -36,24 +36,28 @@ def wristAngles(image, points):
     angle = psMap(angle, 120, 240, 0, 180)
     angle = ceil(angle / 10) * 10
     angle -= 90
-    
+
     if angle < -90:
         if angle > -300:
             angle = -90
         elif angle < -300:
             angle = 90
 
-    cv2.putText(
-        image,
-        str(round(angle, 2)),
-        tuple(np.multiply(b, [1280, 650]).astype(int)),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.5,
-        (255, 255, 255),
-        2,
-        cv2.LINE_AA,
-    )
+    angle = int(round(angle, 2))
+
+    if show_video:
+        cv2.putText(
+            image,
+            str(round(angle, 2)),
+            tuple(np.multiply(b, [1280, 650]).astype(int)),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.5,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
     return angle, image
+
 
 def fingerAngles(image, results, joint_list):
     # Loop through hands
@@ -75,25 +79,25 @@ def fingerAngles(image, results, joint_list):
             )
             # angle = np.abs(radians * 180.0 / np.pi)
 
-
             angle = abs(degrees(radians))  # need to map
-            cv2.putText(
-                image,
-                str(round(angle, 2)),
-                tuple(np.multiply(b, [1280, 650]).astype(int)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                (255, 255, 255),
-                2,
-                cv2.LINE_AA,
-            )
+            if show_video:
+                cv2.putText(
+                    image,
+                    str(round(angle, 2)),
+                    tuple(np.multiply(b, [1280, 650]).astype(int)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (255, 255, 255),
+                    2,
+                    cv2.LINE_AA,
+                )
     return angle  # image
+
 
 def psMap(value, input_start, input_end, output_start, output_end):
     slope = 1.0 * (output_end - output_start) / (input_end - input_start)
     output = output_start + slope * (value - input_start)
     return output
-
 
 
 while cap.isOpened():
@@ -124,16 +128,23 @@ while cap.isOpened():
     )
 
     if len(point_lists) == 3:
-            wrist_angle, _ = wristAngles(image, point_lists)
-             
-    data_to_send = {
-        "turn_angle": int(wrist_angle // 10),
-        "accn": 1 if thumb_angle >= 70 else 0
-    }
-    
+        wrist_angle, _ = wristAngles(image, point_lists)
+
+    turn = 0
+    print(wrist_angle)
+    if wrist_angle >= 30:
+        turn = 1
+    elif wrist_angle <= -30:
+        turn = -1
+    # else:
+    #     print(wrist_angle)
+
+    data_to_send = {"turn_angle": turn, "accn": 1 if thumb_angle >= 70 else 0}
+
     print(data_to_send)
-    
-    if show_video: cv2.imshow("Detecting angles", image)
+
+    if show_video:
+        cv2.imshow("Detecting angles", image)
     if cv2.waitKey(10) & 0xFF == ord("q"):
         break
 
