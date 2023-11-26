@@ -19,7 +19,7 @@ mp_pose = mp.solutions.pose.Pose(  # type: ignore
 
 mp_model = mp_hands.Hands(
     static_image_mode=False,  # only static images
-    max_num_hands=1,  # max 1 hands detection
+    max_num_hands=2,  # max 1 hands detection
     min_detection_confidence=0.5,
 )
 
@@ -34,7 +34,7 @@ def wristAngles(image, points):
     )
     angle = degrees(radians)  # need to map
     angle = psMap(angle, 120, 240, 0, 180)
-    angle = ceil(angle / 10) * 10
+    # angle = ceil(angle / 10) * 10
     angle -= 90
 
     if angle < -90:
@@ -43,7 +43,7 @@ def wristAngles(image, points):
         elif angle < -300:
             angle = 90
 
-    angle = int(round(angle, 2))
+    angle = round(angle, 2)
 
     if show_video:
         cv2.putText(
@@ -59,38 +59,39 @@ def wristAngles(image, points):
     return angle, image
 
 
-def fingerAngles(image, results, joint_list):
+def fingerAngles(image, results, joint_list, i):
     # Loop through hands
-    for hand in results.multi_hand_landmarks:
-        # Loop through joint sets
-        for joint in joint_list:
-            a = np.array(
-                [hand.landmark[joint[0]].x, hand.landmark[joint[0]].y]
-            )  # First coord
-            b = np.array(
-                [hand.landmark[joint[1]].x, hand.landmark[joint[1]].y]
-            )  # Second coord
-            c = np.array(
-                [hand.landmark[joint[2]].x, hand.landmark[joint[2]].y]
-            )  # Third coord
+    # if results.multi_hand_landmarks[i]:
+    hand = results.multi_hand_landmarks[i]
+    # Loop through joint sets
+    for joint in joint_list:
+        a = np.array(
+            [hand.landmark[joint[0]].x, hand.landmark[joint[0]].y]
+        )  # First coord
+        b = np.array(
+            [hand.landmark[joint[1]].x, hand.landmark[joint[1]].y]
+        )  # Second coord
+        c = np.array(
+            [hand.landmark[joint[2]].x, hand.landmark[joint[2]].y]
+        )  # Third coord
 
-            radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(
-                a[1] - b[1], a[0] - b[0]
+        radians = np.arctan2(c[1] - b[1], c[0] - b[0]) - np.arctan2(
+            a[1] - b[1], a[0] - b[0]
+        )
+        # angle = np.abs(radians * 180.0 / np.pi)
+
+        angle = abs(degrees(radians))  # need to map
+        if show_video:
+            cv2.putText(
+                image,
+                str(round(angle, 2)),
+                tuple(np.multiply(b, [1280, 650]).astype(int)),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (255, 255, 255),
+                2,
+                cv2.LINE_AA,
             )
-            # angle = np.abs(radians * 180.0 / np.pi)
-
-            angle = abs(degrees(radians))  # need to map
-            if show_video:
-                cv2.putText(
-                    image,
-                    str(round(angle, 2)),
-                    tuple(np.multiply(b, [1280, 650]).astype(int)),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.5,
-                    (255, 255, 255),
-                    2,
-                    cv2.LINE_AA,
-                )
     return angle  # image
 
 
@@ -108,13 +109,26 @@ while cap.isOpened():
     point_lists = []
     results = mp_model.process(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
     if results.multi_hand_landmarks:
-        thumb_angle = fingerAngles(image, results, [[6, 2, 4]])
 
-        for hand in results.multi_hand_landmarks:
-            a = np.array([hand.landmark[4].x, hand.landmark[4].y])
-            b = np.array([hand.landmark[0].x, hand.landmark[0].y])
-            point_lists.append(a)
-            point_lists.append(b)
+        right = None
+        i = 0
+        for hand in results.multi_handedness:
+            handType = hand.classification[0].label
+            if handType == "Right":
+                right = i
+                break
+            i += 1
+        # for hand in results.multi_hand_landmarks:
+        try:
+            if results.multi_hand_landmarks[i]:
+                thumb_angle = fingerAngles(image, results, [[6, 2, 4]], i)
+                hand = results.multi_hand_landmarks[i]
+                a = np.array([hand.landmark[4].x, hand.landmark[4].y])
+                b = np.array([hand.landmark[0].x, hand.landmark[0].y])
+                point_lists.append(a)
+                point_lists.append(b)
+        except:
+            pass
 
     results = mp_pose.process(image)
 
@@ -131,15 +145,15 @@ while cap.isOpened():
         wrist_angle, _ = wristAngles(image, point_lists)
 
     turn = 0
-    print(wrist_angle)
-    if wrist_angle >= 30:
+    # print(wrist_angle)
+    if wrist_angle >= 35:
         turn = 1
-    elif wrist_angle <= -30:
+    elif wrist_angle <= -35:
         turn = -1
     # else:
     #     print(wrist_angle)
 
-    data_to_send = {"turn_angle": turn, "accn": 1 if thumb_angle >= 70 else 0}
+    data_to_send = {"turn_angle": turn, "accn": 1 if thumb_angle >= 60 else 0}
 
     print(data_to_send)
 
